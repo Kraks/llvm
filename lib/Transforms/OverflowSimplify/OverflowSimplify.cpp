@@ -4,6 +4,49 @@
  * then to regualr instructions, only if they actually won't overflow in any cases.
  */
 
+/* For example, this pass will eliminate overflow intrinsic instruction in the following program:
+
+define i64 @f(i64, i64, i64, i64, i64, i64) {
+entry:
+  %result = call { i64, i1 } @llvm.uadd.with.overflow.i64(i64 1, i64 2)
+  %fst = extractvalue { i64, i1 } %result, 0
+  %snd = extractvalue { i64, i1 } %result, 1
+  br i1 %snd, label %of, label %normal
+
+of:                                               ; preds = %entry
+  call void @overflow_fail(i32 6)
+  br label %normal
+
+normal:                                           ; preds = %of, %entry
+  %result3 = call { i64, i1 } @llvm.uadd.with.overflow.i64(i64 3, i64 %fst)
+  %fst4 = extractvalue { i64, i1 } %result3, 0
+  %snd5 = extractvalue { i64, i1 } %result3, 1
+  br i1 %snd5, label %of1, label %normal2
+
+of1:                                              ; preds = %normal
+  call void @overflow_fail(i32 1)
+  br label %normal2
+
+normal2:                                          ; preds = %of1, %normal
+  ret i64 %fst4
+}
+
+to this:
+
+define i64 @f(i64, i64, i64, i64, i64, i64) {
+entry:
+  %res = add i64 1, 2
+    br label %normal
+    
+normal:                                           ; preds = %entry
+  %res1 = add i64 3, %res
+    br label %normal2
+    
+normal2:                                          ; preds = %normal
+  ret i64 %res1
+}
+*/
+
 #include <llvm/Pass.h>
 #include <llvm/IR/ConstantRange.h>
 #include <llvm/IR/IRBuilder.h>
